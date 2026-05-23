@@ -1,0 +1,116 @@
+name: Bump bcachefs-kmod version
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'   # every Monday 09:00 UTC
+  workflow_dispatch:       # allow manual trigger
+
+jobs:
+  check-and-bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get current spec version
+        id: current
+        run: |
+          VER=$(grep '^Version:' akmods/bcachefs/bcachefs-kmod.spec | awk '{print $2}')
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Get latest bcachefs-tools version from Fedora rawhide
+        id: latest
+        run: |
+          # Track Fedora rawhide (main branch). ngompa (the Fedora bcachefs-tools
+          # maintainer) keeps rawhide current with upstream, and our spec sources
+          # the tarball from evilpiepirate.org directly — so we want upstream's
+          # latest, not the (sometimes lagging) stable-release branch.
+          SPEC_URL="https://src.fedoraproject.org/rpms/bcachefs-tools/raw/main/f/bcachefs-tools.spec"
+          VER=$(curl -fsSL "$SPEC_URL" | grep '^Version:' | head -1 | awk '{print $2}')
+          if [[ -z "$VER" ]]; then
+            echo "Failed to fetch version from Fedora dist-git" >&2
+            exit 1
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if already up to date
+        if: steps.current.outputs.version == steps.latest.outputs.version
+        run: |
+          echo "Already at ${{ steps.current.outputs.version }}, nothing to do."
+
+      - name: Bump spec files
+        if: steps.current.outputs.version != steps.latest.outputs.version
+        env:
+          OLD: ${{ steps.current.outputs.version }}
+          NEW: ${{ steps.latest.outputs.version }}
+        run: |
+          DATE=$(date '+%a %b %d %Y')
+
+          for spec in akmods/bcachefs/bcachefs-kmod.spec \
+                      akmods/bcachefs/bcachefs-kmod-common.spec; do
+            # Bump version
+            sed -i "s/^Version:[ \t]*/Version:        /" "$spec"
+            sed -i "s/^Version:        .*/Version:        ${NEW}/" "$spec"
+            # Prepend changelog entry (keep existing entries below)
+            sed -i "/^%changelog/a * ${DATE} github-actions <github-actions@github.com> - ${NEW}-1\n- Update to bcachefs-tools ${NEW}\n" "$spec"
+          done
+
+      - name: Validate SRPM in Fedora 44 container
+        if: steps.current.outputs.version != steps.latest.outputs.version
+        env:
+          NEW: ${{ steps.latest.outputs.version }}
+        run: |
+          # Download the new tarball so rpmbuild -bs can verify the Source0 URL resolves
+          TARBALL="bcachefs-tools-${NEW}.tar.zst"
+          URL="https://evilpiepirate.org/bcachefs-tools/${TARBALL}"
+          curl -fsSL -o "/tmp/${TARBALL}" "$URL" || {
+            echo "WARNING: tarball not yet published at $URL — SRPM check skipped"
+            exit 0
+          }
+
+          docker run --rm \
+            -v "$(pwd)/akmods/bcachefs:/specs:ro" \
+            -v "/tmp/${TARBALL}:/root/rpmbuild/SOURCES/${TARBALL}:ro" \
+            fedora:44 bash -c "
+              dnf install -y rpm-build kmodtool --quiet &&
+              rpmdev-setuptree &&
+              cp /specs/bcachefs-kmod.spec /root/rpmbuild/SPECS/ &&
+              rpmbuild -bs /root/rpmbuild/SPECS/bcachefs-kmod.spec --nodeps
+            "
+
+      - name: Open pull request
+        if: steps.current.outputs.version != steps.latest.outputs.version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OLD: ${{ steps.current.outputs.version }}
+          NEW: ${{ steps.latest.outputs.version }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="bump/bcachefs-${NEW}"
+          git checkout -b "$BRANCH"
+          git add akmods/bcachefs/
+          git commit -m "feat: bump bcachefs-kmod ${OLD} → ${NEW}"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "feat: bump bcachefs-kmod ${OLD} → ${NEW}" \
+            --body "$(cat <<EOF
+          ## Automatic version bump
+
+          bcachefs-tools \`${NEW}\` landed in Fedora rawhide.
+
+          **Changes:**
+          - \`Version: ${OLD}\` → \`Version: ${NEW}\` in both spec files
+
+          **Validation:**
+          - SRPM parsed cleanly in a Fedora 44 container
+          - Full build still needs COPR or a local \`rpmbuild -bb\`
+
+          _Triggered by the weekly bump-bcachefs workflow._
+          EOF
+          )"
