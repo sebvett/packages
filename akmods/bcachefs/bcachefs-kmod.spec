@@ -21,6 +21,7 @@ URL:            https://bcachefs.org
 Source0:        https://evilpiepirate.org/bcachefs-tools/bcachefs-tools-%{version}.tar.zst
 
 BuildRequires:  kmodtool
+BuildRequires:  make
 
 # kmodtool generates the akmod-bcachefs subpackage and per-kernel kmod packages
 %{expand:%(kmodtool --target %{_target_cpu} --kmodname %{real_name} --%{buildforkernels} %{?kernels:--for-kernels "%{?kernels}"} 2>/dev/null)}
