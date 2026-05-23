@@ -11,6 +11,13 @@ BuildArch:      noarch
 Requires:       %{real_name}-kmod = %{?epoch:%{epoch}:}%{version}
 Provides:       %{real_name}-kmod-common = %{?epoch:%{epoch}:}%{version}
 
+# dkms-bcachefs ships the same kernel module but uses DKMS, which cannot
+# write to /var/lib/dkms on immutable Fedora systems (rpm-ostree/bootc).
+# It is auto-pulled via Supplements:(bcachefs-tools and kernel-core) in the
+# Fedora package. Declaring a conflict prevents that from happening when
+# this akmod is already present.
+Conflicts:      dkms-bcachefs
+
 %description
 Common package for the bcachefs out-of-tree kernel module.
 bcachefs is a copy-on-write filesystem for Linux emphasising
