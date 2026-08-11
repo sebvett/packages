@@ -9,7 +9,7 @@
 BuildRequires:          kernel-devel >= %{min_kver}
 
 Name:           %{real_name}-kmod
-Version:        1.38.3
+Version:        1.38.6
 Release:        1%{?dist}
 Summary:        bcachefs out-of-tree kernel module
 License:        GPL-2.0-only
@@ -83,5 +83,8 @@ done
 %{?akmod_install}
 
 %changelog
+* Mon Aug 11 2026 Sebastian Vetterlein <sebvetterlein@outlook.com> - 1.38.6-1
+- Update to bcachefs-tools 1.38.6
+
 * Fri May 23 2026 Sebastian Vetterlein <sebvetterlein@outlook.com> - 1.38.3-1
 - Initial packaging of bcachefs akmod for ublue-os

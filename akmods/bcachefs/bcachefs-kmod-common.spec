@@ -1,7 +1,7 @@
 %global real_name bcachefs
 
 Name:           %{real_name}-kmod-common
-Version:        1.38.3
+Version:        1.38.6
 Release:        1%{?dist}
 Summary:        Common files for bcachefs out-of-tree kernel module
 License:        GPL-2.0-only
@@ -38,5 +38,8 @@ provides the out-of-tree module for immutable Fedora systems
 # No files — this package exists only to pull in bcachefs-kmod
 
 %changelog
+* Mon Aug 11 2026 Sebastian Vetterlein <sebvetterlein@outlook.com> - 1.38.6-1
+- Update to bcachefs-tools 1.38.6
+
 * Fri May 23 2026 Sebastian Vetterlein <sebvetterlein@outlook.com> - 1.38.3-1
 - Initial packaging of bcachefs akmod for ublue-os
